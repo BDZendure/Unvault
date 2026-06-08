@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import LandingPage from '@/components/LandingPage';
 import { createClient } from '@/lib/supabase/server';
 import type { AuthMode } from '@/components/AuthModal';
@@ -12,10 +11,9 @@ export default async function Page({ searchParams }: Props) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect('/dashboard');
 
   const { auth } = await searchParams;
   const initialAuth: AuthMode | null =
     auth === 'signin' || auth === 'signup' ? auth : null;
-  return <LandingPage initialAuth={initialAuth} />;
+  return <LandingPage initialAuth={initialAuth} isAuthenticated={!!user} />;
 }

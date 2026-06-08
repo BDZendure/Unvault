@@ -15,17 +15,20 @@ const BENEFITS = [
 export default function SubscriptionModal({
   analysesUsed,
   mode = 'paywall',
+  isAuthenticated = false,
   onClose,
   onSignUp,
 }: {
   analysesUsed: number;
   mode?: SubscriptionMode;
+  isAuthenticated?: boolean;
   onClose: () => void;
   onSignUp?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const isPricing = mode === 'pricing';
+  const canCheckout = mode === 'paywall' || isAuthenticated;
 
   async function handleSubscribe() {
     setErr('');
@@ -44,9 +47,7 @@ export default function SubscriptionModal({
     }
   }
 
-  const primaryClick = isPricing
-    ? () => onSignUp?.()
-    : handleSubscribe;
+  const primaryClick = canCheckout ? handleSubscribe : () => onSignUp?.();
 
   return (
     <div className="in-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -106,7 +107,7 @@ export default function SubscriptionModal({
 
           <button
             onClick={primaryClick}
-            disabled={!isPricing && busy}
+            disabled={canCheckout && busy}
             style={{
               width: '100%', padding: 14, background: '#5E0ED7', color: '#fff', border: 'none', borderRadius: 10,
               fontFamily: 'inherit', fontSize: 14, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase',
@@ -122,7 +123,7 @@ export default function SubscriptionModal({
                 </svg>
                 Redirecting…
               </>
-            ) : isPricing ? 'Get Started — $9.99 / mo' : 'Subscribe — $9.99 / mo'}
+            ) : canCheckout ? 'Subscribe — $9.99 / mo' : 'Get Started — $9.99 / mo'}
           </button>
 
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Cancel anytime · No hidden fees · Billed monthly</p>
