@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/client';
 import type { Piece, Profile } from '@/lib/types';
 import { FREE_ANALYSIS_LIMIT } from '@/lib/types';
@@ -83,9 +84,22 @@ export default function DashboardView({
   }
 
   async function logout() {
-    await supabase.auth.signOut();
-    router.push('/');
-    router.refresh();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.push('/');
+      router.refresh();
+    } catch (e) {
+      Sentry.withScope((scope) => {
+        scope.setTag('integration', 'supabase');
+        scope.setTag('route', 'dashboard');
+        scope.setTag('supabase_stage', 'sign_out');
+        if (profile?.id) scope.setUser({ id: profile.id });
+        scope.setFingerprint(['supabase', 'sign_out', 'dashboard']);
+        Sentry.captureException(e);
+      });
+      setErrMsg(e instanceof Error ? e.message : 'Sign out failed.');
+    }
   }
 
   return (

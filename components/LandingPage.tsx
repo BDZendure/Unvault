@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import * as Sentry from '@sentry/nextjs';
 import AuthModal, { type AuthMode } from './AuthModal';
 import SubscriptionModal from './SubscriptionModal';
 import { createClient } from '@/lib/supabase/client';
@@ -91,8 +92,19 @@ export default function LandingPage({
     setAuthMode('signup');
   };
   const signOut = async () => {
-    await supabase.auth.signOut();
-    router.refresh();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.refresh();
+    } catch (e) {
+      Sentry.withScope((scope) => {
+        scope.setTag('integration', 'supabase');
+        scope.setTag('route', 'landing');
+        scope.setTag('supabase_stage', 'sign_out');
+        scope.setFingerprint(['supabase', 'sign_out', 'landing']);
+        Sentry.captureException(e);
+      });
+    }
   };
   const heroCta = () => {
     if (isAuthenticated) router.push('/dashboard');
