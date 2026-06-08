@@ -192,3 +192,19 @@ Located `ring 1.jpg` and `ring 2.jpg` in `~/Downloads/`, created `testing_images
 First run failed both images with a 404 from `gemini-2.0-flash-exp` — the experimental model wired into `.env.local` was deprecated by Google. Listed available models via `GET /v1beta/models?key=...` and confirmed `gemini-2.5-flash`, `gemini-2.0-flash`, and `gemini-flash-latest` are current. Re-ran with `GEMINI_MODEL=gemini-2.5-flash`: ring 1 returned a clean structured appraisal (Rose Gold · Prasiolite and Diamond, $700–$1200, confidence 0.9, Excellent condition, contemporary vintage-inspired floral solitaire, 5 signals / 5 care tips) in ~4.6s; ring 2 hit a 503 "high demand". A retry returned 503 for both. The user interrupted before a third retry with `gemini-2.0-flash`. End result: the Gemini API key works end-to-end (multimodal input + JSON-schema structured output), but `GEMINI_MODEL=gemini-2.0-flash-exp` in `.env.local` and the Vercel Production env both need to be updated to a current model name; `gemini-2.5-flash` is the natural successor and `gemini-2.0-flash` is a fine stable alternative.
 
 For source control: working tree had three untracked items (`app/auth/confirm/`, `scripts/gemini-test.mjs`, `testing_images/`). Split into two focused commits — `264b273` "Add /auth/confirm route for Supabase email verification" (the bug fix) and `eb88fee` "Add Gemini API smoke test script and ring fixtures" — and pushed straight to `origin/scaffold-nextjs-app`, which the branch already tracks. No PR needed; offered to open one if the user wants `scaffold-nextjs-app → main`.
+
+---
+
+### Gemini model swap to 2.5-flash
+
+**User**
+
+> update the gemni prompt to use 2.5 flash
+
+**User**
+
+> add this fix to the end of the @README.md and commit and push changes
+
+**Agent**
+
+Grepped for `GEMINI_MODEL` and `gemini-2` and found four references to the dead `gemini-2.0-flash-exp` model: the fallback in `lib/gemini.ts:8`, the local override in `.env.local:15`, the committed template in `.env.example:20`, and the architecture note in `CLAUDE.md:47`. Swapped all four to `gemini-2.5-flash` (the natural successor surfaced in the previous smoke test). Also updated Vercel Production: `vercel env rm GEMINI_MODEL production --yes` then `printf 'gemini-2.5-flash' | vercel env add GEMINI_MODEL production`. `npm run typecheck` passed. The Vercel env change won't take effect until the next deploy — left that for the user to trigger with `vercel --prod --yes` when ready.

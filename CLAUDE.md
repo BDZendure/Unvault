@@ -44,7 +44,7 @@ The project uses the **new** Supabase publishable/secret key format (`sb_publish
    - Enforces the quota gate: `!is_premium && analyses_used >= FREE_ANALYSIS_LIMIT` → returns 402 with `reason: 'quota_exceeded'`. The client opens the paywall on this response.
    - Uses the service client to read `pieces`, signs the storage URL, fetches bytes, calls `analyzeJewelryImage` from `lib/gemini.ts`, then writes `status='analyzed'` + `analysis` back. Only increments `analyses_used` for non-premium users.
    - Idempotent: if `piece.status === 'analyzed'`, returns the cached analysis without calling Gemini again.
-- `lib/gemini.ts` pins the structured-output schema via `responseSchema` and `responseMimeType: 'application/json'`. `MODEL` is configurable via `GEMINI_MODEL`, default `gemini-2.0-flash-exp`. `Analysis` (in `lib/types.ts`) is the contract the schema and the UI both depend on — keep them in sync when changing fields.
+- `lib/gemini.ts` pins the structured-output schema via `responseSchema` and `responseMimeType: 'application/json'`. `MODEL` is configurable via `GEMINI_MODEL`, default `gemini-2.5-flash`. `Analysis` (in `lib/types.ts`) is the contract the schema and the UI both depend on — keep them in sync when changing fields.
 
 ### Billing (Paddle)
 
