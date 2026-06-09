@@ -208,3 +208,51 @@ For source control: working tree had three untracked items (`app/auth/confirm/`,
 **Agent**
 
 Grepped for `GEMINI_MODEL` and `gemini-2` and found four references to the dead `gemini-2.0-flash-exp` model: the fallback in `lib/gemini.ts:8`, the local override in `.env.local:15`, the committed template in `.env.example:20`, and the architecture note in `CLAUDE.md:47`. Swapped all four to `gemini-2.5-flash` (the natural successor surfaced in the previous smoke test). Also updated Vercel Production: `vercel env rm GEMINI_MODEL production --yes` then `printf 'gemini-2.5-flash' | vercel env add GEMINI_MODEL production`. `npm run typecheck` passed. The Vercel env change won't take effect until the next deploy — left that for the user to trigger with `vercel --prod --yes` when ready.
+
+---
+
+### Vercel production promotion for the Gemini model swap
+
+**User**
+
+> switch the current updated version to production on vercel
+
+**Agent**
+
+Ran `vercel --prod --yes` on commit `632237a`. Deployment `unvault-emr3b1tx7-bdzendures-projects.vercel.app` came up READY; the primary URL `https://unvault-snowy.vercel.app` returned 200. Live `/api/analyze` calls now route to `gemini-2.5-flash` instead of the dead `gemini-2.0-flash-exp`.
+
+---
+
+### Header & auth UX fixes (profile dropdown, logo nav, sign-out, signed-in pricing)
+
+**User**
+
+> Clicking on the user profile (top right) after logging in should not log the user out. Instead, there should be a drop down which lets the user sign out. Clicking on the target symbol in the top left should bring the user back to the landing page. While signed in, tThe "sign in" on the landing page should be changed to a "sign out" Furthermore, clicking pricing will let the user purchase prenium without bringing the user to a sign in redirect.
+
+**Agent**
+
+In plan mode: spawned one Explore agent that mapped the header / auth plumbing across `DashboardView`, `LandingPage`, `SubscriptionModal`, `AnalysisView`, and `app/page.tsx` — flagged that `app/page.tsx` server-redirected authenticated users away from `/`, the profile button had `onClick={logout}` (no dropdown), the two logo clusters were non-interactive `<div>`s, `LandingPage` received no auth-state prop, and the pricing button assumed unauthenticated visitors. A Plan agent designed the approach: fetch `user` server-side in `app/page.tsx` and pass `isAuthenticated: boolean` down (no client listener — avoids any "Sign In" → "Sign Out" flicker), reuse the existing `menuIn` keyframe from `app/globals.css` for the dropdown entry, render a transparent fixed-position backdrop (not `.in-overlay`, which dims the screen) for click-outside, and thread `isAuthenticated` into `SubscriptionModal` so signed-in users skip the signup detour. Read all five critical files to verify line numbers, wrote the plan to `/Users/blakezhang/.claude/plans/clicking-on-the-user-shiny-dewdrop.md`, ExitPlanMode'd.
+
+Implementation: dropped the redirect in `app/page.tsx` and forwarded `isAuthenticated={!!user}`. `LandingPage` accepted the new prop, added a `signOut` handler mirroring the dashboard pattern, made the second `navLinks` entry conditional (flows automatically to both desktop nav and mobile menu), branched the hero CTA so signed-in users route to `/dashboard` instead of re-opening signup, and forwarded `isAuthenticated` into `SubscriptionModal`. `SubscriptionModal` got a `canCheckout = mode === 'paywall' || isAuthenticated` helper that drives `primaryClick` (→ `handleSubscribe` when can-checkout, else `onSignUp`), the button label (`Subscribe — $9.99 / mo` vs `Get Started — $9.99 / mo`), and the `disabled` expression. `DashboardView` got a `menuOpen` state, wrapped the logo + "Unvault" wordmark in `<Link href="/">`, replaced the click-to-logout `<div>` with a button that toggles the menu (chevron rotates 180° as the affordance), and a dropdown panel anchored bottom-right with `z-index: 301` above a `z-300` transparent backdrop (well below the drag overlay's `z-400`) containing a single Sign Out item. `AnalysisView` `Nav` got the same logo `<Link>` wrap, leaving the "My Pieces" back button untouched. `npm run typecheck` clean. Committed `fab05b2` ("Fix header & auth UX (dropdown, logo nav, sign-out, signed-in pricing)") covering five files, pushed to `origin/scaffold-nextjs-app`, then deployed (`unvault-7meggdd8j`, READY). Did not drive a browser walk-through — flagged that explicitly and left the visual verification to the user.
+
+---
+
+### Sentry observability for auth flows
+
+**User**
+
+> Review the recent changes to signout and landingpage-redirect behavior. Make sure appropriate sentry error handling is in place: capturing sign-out failures, redirect/navigation failures. Identify any missing events or gaps in observability and implement fixes
+
+**User**
+
+> commit and push changes
+
+**User**
+
+> change the new version to production
+
+**Agent**
+
+Read `sentry.server.config.ts`, `instrumentation-client.ts`, and `app/api/paddle/checkout/route.ts` for the established convention (`Sentry.withScope` with `integration`, `route`, `<integration>_stage` tags, fingerprint per stage, `setUser({ id })` when known). Found five sites in the recent diff that silently swallowed Supabase failures: `LandingPage.signOut` (new), `DashboardView.logout` (pre-existing but now reached via the new dropdown), `app/page.tsx getUser` (uncaught after the landing redirect was removed), `/auth/confirm verifyOtp` (returned `{ error }` swallowed before redirect to the failure page), and `/auth/callback exchangeCodeForSession` (return value never checked — pre-existing but in the same redirect family). Wrapped each in try/catch and captured under the established convention with `integration=supabase`, `route=<...>`, `supabase_stage=<sign_out|get_user|verify_otp|exchange_code>`, plus `otp_type` where applicable, and `setUser({ id: profile.id })` on the dashboard logout. Side effects beyond pure instrumentation: `/auth/callback` now redirects failed exchanges to `/?auth=signin&error=callback_failed` instead of silently sending the user to `/dashboard` with no session; `DashboardView.logout` surfaces the error to the user via the existing `errMsg` banner; `app/page.tsx` falls through to `isAuthenticated=false` and renders the landing rather than 500-ing. `router.push` / `router.refresh` were intentionally left uninstrumented — client navigation in App Router doesn't throw, so they aren't useful Sentry targets. `Sentry.setUser` propagation at the client boundary, `AuthModal` sign-in/up failures, and middleware `getUser` capture were called out as out-of-scope (the last risks Sentry spam on transient issues). `npm run typecheck` clean.
+
+`commit and push changes` was a re-confirmation — commit `59ffa7d` ("Instrument auth sign-out, OTP verify, code exchange, and landing getUser", 5 files / +100 / −17) had already been pushed in the same agent turn after the typecheck. On `change the new version to production`, ran `vercel --prod --yes`; deployment `unvault-epx4hvv9b-bdzendures-projects.vercel.app` came up READY on `https://unvault-snowy.vercel.app`. Live sign-out, OTP verify, code exchange, and landing-page `getUser` failures will now appear in Sentry tagged `integration=supabase`.
