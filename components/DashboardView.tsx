@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import * as Sentry from '@sentry/nextjs';
 import { createClient } from '@/lib/supabase/client';
 import type { Piece, Profile } from '@/lib/types';
 import { FREE_ANALYSIS_LIMIT } from '@/lib/types';
@@ -35,6 +37,7 @@ export default function DashboardView({
   const [analyzingId, setAnalyzingId] = useState<number | null>(null);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [errMsg, setErrMsg] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const remaining = profile.is_premium
     ? Infinity
@@ -81,9 +84,22 @@ export default function DashboardView({
   }
 
   async function logout() {
-    await supabase.auth.signOut();
-    router.push('/');
-    router.refresh();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.push('/');
+      router.refresh();
+    } catch (e) {
+      Sentry.withScope((scope) => {
+        scope.setTag('integration', 'supabase');
+        scope.setTag('route', 'dashboard');
+        scope.setTag('supabase_stage', 'sign_out');
+        if (profile?.id) scope.setUser({ id: profile.id });
+        scope.setFingerprint(['supabase', 'sign_out', 'dashboard']);
+        Sentry.captureException(e);
+      });
+      setErrMsg(e instanceof Error ? e.message : 'Sign out failed.');
+    }
   }
 
   return (
@@ -113,10 +129,10 @@ export default function DashboardView({
       )}
 
       <nav style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '0 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60, position: 'sticky', top: 0, zIndex: 200 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
           <div className="lp-logo"><div className="lp-logo-dot" /></div>
           <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '.1em', textTransform: 'uppercase' }}>Unvault</span>
-        </div>
+        </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {profile.is_premium && (
             <span className="in-badge in-badge-acc" style={{ gap: 5 }}>
@@ -126,20 +142,51 @@ export default function DashboardView({
               Premium
             </span>
           )}
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 8, padding: '6px 10px', transition: 'background .15s' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f5f5f7')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            onClick={logout}
-            title="Sign out"
-          >
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#5E0ED7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-              {(profile.name || profile.email || 'U')[0].toUpperCase()}
-            </div>
-            <span style={{ fontSize: 13, color: 'var(--text2)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name || profile.email}</span>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ color: '#ccc', flexShrink: 0 }}>
-              <path d="M2 4.5l4.5 4.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderRadius: 8, padding: '6px 10px', transition: 'background .15s', background: menuOpen ? '#f5f5f7' : 'transparent', border: 'none', fontFamily: 'inherit' }}
+              onMouseEnter={(e) => { if (!menuOpen) e.currentTarget.style.background = '#f5f5f7'; }}
+              onMouseLeave={(e) => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#5E0ED7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                {(profile.name || profile.email || 'U')[0].toUpperCase()}
+              </div>
+              <span style={{ fontSize: 13, color: 'var(--text2)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name || profile.email}</span>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ color: '#ccc', flexShrink: 0, transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
+                <path d="M2 4.5l4.5 4.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <>
+                <div
+                  style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'transparent' }}
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div
+                  role="menu"
+                  style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 301, background: '#fff', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.08)', minWidth: 180, padding: 6, animation: 'menuIn .18s ease' }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); logout(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 7, fontFamily: 'inherit', fontSize: 13, color: 'var(--text2)', textAlign: 'left', transition: 'background .15s' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f5f5f7')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                      <path d="M9 4V2.5A1.5 1.5 0 0 0 7.5 1h-4A1.5 1.5 0 0 0 2 2.5v9A1.5 1.5 0 0 0 3.5 13h4A1.5 1.5 0 0 0 9 11.5V10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M6 7h7M11 4.5L13.5 7 11 9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </nav>

@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import * as Sentry from '@sentry/nextjs';
 import AuthModal, { type AuthMode } from './AuthModal';
 import SubscriptionModal from './SubscriptionModal';
+import { createClient } from '@/lib/supabase/client';
 
 const VIDEO_SRC =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260517_222138_3e3205be-3364-417b-a64a-bfe087acbec4.mp4';
@@ -16,7 +19,15 @@ function ArrowUpRight() {
   );
 }
 
-export default function LandingPage({ initialAuth }: { initialAuth?: AuthMode | null }) {
+export default function LandingPage({
+  initialAuth,
+  isAuthenticated = false,
+}: {
+  initialAuth?: AuthMode | null;
+  isAuthenticated?: boolean;
+}) {
+  const router = useRouter();
+  const supabase = createClient();
   const [vis, setVis] = useState(false);
   const [menu, setMenu] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode | null>(initialAuth ?? null);
@@ -80,10 +91,31 @@ export default function LandingPage({ initialAuth }: { initialAuth?: AuthMode | 
     setPricingOpen(false);
     setAuthMode('signup');
   };
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.refresh();
+    } catch (e) {
+      Sentry.withScope((scope) => {
+        scope.setTag('integration', 'supabase');
+        scope.setTag('route', 'landing');
+        scope.setTag('supabase_stage', 'sign_out');
+        scope.setFingerprint(['supabase', 'sign_out', 'landing']);
+        Sentry.captureException(e);
+      });
+    }
+  };
+  const heroCta = () => {
+    if (isAuthenticated) router.push('/dashboard');
+    else openAuth('signup');
+  };
 
   const navLinks: Array<{ label: string; act: () => void }> = [
     { label: 'Pricing', act: openPricing },
-    { label: 'Sign In', act: () => openAuth('signin') },
+    isAuthenticated
+      ? { label: 'Sign Out', act: signOut }
+      : { label: 'Sign In', act: () => openAuth('signin') },
   ];
 
   const stats: Array<{ num: string; label: string }> = [
@@ -147,7 +179,7 @@ export default function LandingPage({ initialAuth }: { initialAuth?: AuthMode | 
               <p className="lp-tagline" style={fu(5)}>
                 Uncover the Story<br />Behind Every Piece<br />You Treasure
               </p>
-              <button className="lp-cta" style={fu(6)} onClick={() => openAuth('signup')}>
+              <button className="lp-cta" style={fu(6)} onClick={heroCta}>
                 Start Analyzing <ArrowUpRight />
               </button>
             </div>
@@ -184,7 +216,7 @@ export default function LandingPage({ initialAuth }: { initialAuth?: AuthMode | 
               ))}
             </nav>
             <div className="lp-menu-footer">
-              <button className="lp-cta" onClick={() => { setMenu(false); openAuth('signup'); }}>
+              <button className="lp-cta" onClick={() => { setMenu(false); heroCta(); }}>
                 Start Analyzing <ArrowUpRight />
               </button>
             </div>
@@ -204,6 +236,7 @@ export default function LandingPage({ initialAuth }: { initialAuth?: AuthMode | 
         <SubscriptionModal
           mode="pricing"
           analysesUsed={0}
+          isAuthenticated={isAuthenticated}
           onClose={() => setPricingOpen(false)}
           onSignUp={openSignupFromPricing}
         />

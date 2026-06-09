@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { Analysis, Piece } from '@/lib/types';
 
 const STEPS = [
@@ -25,8 +26,10 @@ function Nav({ onBack }: { onBack: () => void }) {
         My Pieces
       </button>
       <span style={{ color: 'var(--border)', fontSize: 16 }}>|</span>
-      <div className="lp-logo"><div className="lp-logo-dot" /></div>
-      <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '.1em', textTransform: 'uppercase' }}>Unvault</span>
+      <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
+        <div className="lp-logo"><div className="lp-logo-dot" /></div>
+        <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '.1em', textTransform: 'uppercase' }}>Unvault</span>
+      </Link>
     </nav>
   );
 }

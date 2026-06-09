@@ -5,7 +5,7 @@ import {
 } from '@google/generative-ai';
 import type { Analysis } from './types';
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 const responseSchema = {
   type: SchemaType.OBJECT,
