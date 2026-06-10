@@ -44,17 +44,13 @@ export async function POST() {
     }
 
     stage = 'transaction';
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
     const tx = await paddle.transactions.create({
       items: [{ priceId: priceId(), quantity: 1 }],
       customerId,
       customData: { supabase_user_id: user.id },
-      checkout: { url: `${appUrl}/dashboard?subscribed=1` },
     });
 
-    const url = tx.checkout?.url;
-    if (!url) throw new Error('Paddle did not return a checkout URL');
-    return NextResponse.json({ url });
+    return NextResponse.json({ transactionId: tx.id, customerId });
   } catch (e) {
     Sentry.withScope((scope) => {
       scope.setTag('integration', 'paddle');

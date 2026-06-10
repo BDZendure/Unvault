@@ -1,8 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { initializePaddle, type Paddle } from '@paddle/paddle-js';
 
 export type SubscriptionMode = 'paywall' | 'pricing';
+
+let paddlePromise: Promise<Paddle | undefined> | null = null;
+function loadPaddle() {
+  if (paddlePromise) return paddlePromise;
+  const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+  if (!token) {
+    paddlePromise = Promise.reject(new Error('NEXT_PUBLIC_PADDLE_CLIENT_TOKEN is not set'));
+    return paddlePromise;
+  }
+  paddlePromise = initializePaddle({
+    environment: process.env.NEXT_PUBLIC_PADDLE_ENV === 'production' ? 'production' : 'sandbox',
+    token,
+  });
+  return paddlePromise;
+}
 
 const BENEFITS = [
   'Unlimited AI analyses — rings, necklaces, bracelets & more',
@@ -30,19 +46,37 @@ export default function SubscriptionModal({
   const isPricing = mode === 'pricing';
   const canCheckout = mode === 'paywall' || isAuthenticated;
 
+  useEffect(() => {
+    if (canCheckout) loadPaddle().catch(() => {});
+  }, [canCheckout]);
+
   async function handleSubscribe() {
     setErr('');
     setBusy(true);
     try {
-      const res = await fetch('/api/paddle/checkout', { method: 'POST' });
+      const [paddle, res] = await Promise.all([
+        loadPaddle(),
+        fetch('/api/paddle/checkout', { method: 'POST' }),
+      ]);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Checkout failed (${res.status})`);
       }
-      const { url } = (await res.json()) as { url: string };
-      window.location.href = url;
+      const { transactionId, customerId } = (await res.json()) as {
+        transactionId: string;
+        customerId: string;
+      };
+      if (!paddle) throw new Error('Paddle.js failed to load');
+      paddle.Checkout.open({
+        transactionId,
+        customer: { id: customerId },
+        settings: {
+          successUrl: `${window.location.origin}/dashboard?subscribed=1`,
+        },
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
       setBusy(false);
     }
   }
@@ -121,7 +155,7 @@ export default function SubscriptionModal({
                   <circle cx="7.5" cy="7.5" r="5.5" stroke="rgba(255,255,255,.3)" strokeWidth="2" fill="none" />
                   <path d="M7.5 2a5.5 5.5 0 0 1 5.5 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none" />
                 </svg>
-                Redirecting…
+                Opening checkout…
               </>
             ) : canCheckout ? 'Subscribe — $9.99 / mo' : 'Get Started — $9.99 / mo'}
           </button>
